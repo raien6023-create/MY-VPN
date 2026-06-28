@@ -1,5 +1,7 @@
 import os
 import json
+import time
+import requests
 from flask import Flask
 import telebot
 from telebot import types
@@ -15,6 +17,25 @@ def home():
 def run_web_server():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
+
+# تابع پینگ خودکار برای جلوگیری از خاموش شدن ربات در رندر
+def ping_self():
+    # ۵ دقیقه منتظر می‌ماند تا سرور کاملاً بالا بیاید، سپس پینگ را شروع می‌کند
+    time.sleep(300)
+    # آدرس وب‌سایت شما در رندر (Render URL) به صورت خودکار از محیط رندر خوانده می‌شود
+    # اگر کار نکرد، می‌توانید به جای os.environ.get آدرس سایت رندرتان را دستی بگذارید
+    render_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if not render_url:
+        # اگر متغیر رندر در دسترس نبود، از پورت محلی استفاده می‌کند (یا می‌توانید دستی آدرس رندرتان را اینجا بنویسید)
+        render_url = "http://localhost:8080"
+        
+    while True:
+        try:
+            requests.get(render_url)
+            print("Self-ping successful. Keeping bot alive! 🟢")
+        except Exception as e:
+            print(f"Self-ping failed: {e}")
+        time.sleep(240)  # هر ۴ دقیقه یک‌بار پینگ می‌کند تا سرور نخوابد
 
 # ۲. تنظیمات ربات تلگرام
 TOKEN = os.environ.get('BOT_TOKEN')
@@ -54,7 +75,8 @@ def init_user(user_id, referrer_id=None):
             "days_left": 0,
             "referrals": 0,
             "referred_by": referrer_id,
-            "claimed_rewards": 0
+            "claimed_rewards": 0,
+            "has_used_test": False  # فیلد جدید برای بررسی استفاده از تست رایگان
         }
         if referrer_id and str(referrer_id) in db:
             db[str(referrer_id)]["referrals"] += 1
@@ -133,7 +155,6 @@ def check_join_callback(call):
 def handle_all_messages(message):
     user_id = message.from_user.id
     
-    # ادمین ممکن است بخواهد روی پیامی ریپلای کند، در این صورت عضویت اجباری برای ادمین نادیده گرفته می‌شود
     if message.from_user.id != ADMIN_ID and not is_user_member(user_id):
         send_welcome(message)
         return
@@ -147,16 +168,12 @@ def handle_all_messages(message):
     # سیستم پاسخ هوشمند ادمین (ریپلای روی پیام‌های اعلان خرید، تست یا هدیه رفرال)
     if message.from_user.id == ADMIN_ID and message.reply_to_message:
         reply_text = message.reply_to_message.text
-        # اگر ادمین روی عکس فیش ریپلای کند، پیام متنی ندارد؛ پس متن پیام قبلی (کپشن یا مسیج بالای عکس) را چک می‌کنیم
         if not reply_text and message.reply_to_message.caption:
             reply_text = message.reply_to_message.caption
             
         if reply_text and "🆔 آیدی عددی:" in reply_text:
             try:
-                # استخراج آیدی عددی کاربر از متن اعلان
                 target_user_id = int(reply_text.split("🆔 آیدی عددی:")[1].split("\n")[0].strip().replace('`', ''))
-                
-                # ارسال کانفیگ فرستاده شده توسط ادمین برای کاربر
                 bot.send_message(target_user_id, f"🚀 **کانفیگ شما توسط مدیریت صادر شد:**\n\n`{message.text}`", parse_mode="Markdown")
                 bot.reply_to(message, f"✅ کانفیگ با موفقیت برای کاربر `{target_user_id}` ارسال شد.")
             except Exception as e:
@@ -180,6 +197,15 @@ def handle_all_messages(message):
         return
 
     if message.text == "🎁 تست ۱ روزه":
+        # بررسی اینکه آیا کاربر قبلاً تست گرفته است یا خیر
+        if db[uid].get("has_used_test", False):
+            bot.send_message(message.chat.id, "❌ شما قبلاً یک‌بار از سهمیه تست رایگان خود استفاده کرده‌اید و امکان دریافت مجدد وجود ندارد.")
+            return
+            
+        # در صورت مجاز بودن، وضعیت را به True تغییر داده و ذخیره می‌کنیم
+        db[uid]["has_used_test"] = True
+        save_db(db)
+        
         bot.send_message(message.chat.id, "⏳ درخواست تست شما ثبت شد و برای ادمین ارسال گردید. به زودی کانفیگ برای شما ارسال می‌شود.")
         bot.send_message(ADMIN_ID, f"🔔 **درخواست تست رایگان**\n\n👤 کاربر: {message.from_user.first_name}\n🆔 آیدی عددی: `{user_id}`\nیوزرنیم: @{message.from_user.username or 'ندارد'}\n\n👉 جهت ارسال کانفیگ به این کاربر، روی همین پیام ریپلای کنید.")
         return
@@ -209,7 +235,6 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, f"جهت ارتباط با پشتیبانی، پاسخ به سوالات یا پیگیری خرید با آیدی زیر در ارتباط باشید:\n\n➡️ @AmirTA28")
         return
 
-    # دریافت فیش واریزی (عکس)
     if message.content_type == 'photo':
         bot.send_message(message.chat.id, "✅ فیش واریزی شما دریافت شد و برای بررسی به ادمین ارسال گردید. لطفا منتظر تایید بمانید.", reply_markup=get_main_menu())
         
@@ -278,8 +303,15 @@ def set_user_days(message):
 def run_bot():
     bot.infinity_polling()
 
-# ۳. اجرای هم‌زمان سرور وب و ربات
+# ۳. اجرای هم‌زمان سرور وب، سیستم پینگ زنده و ربات
 if __name__ == "__main__":
-    t = Thread(target=run_web_server)
-    t.start()
+    # ترد اول برای ران کردن وب سرور فلاسک
+    t_server = Thread(target=run_web_server)
+    t_server.start()
+    
+    # ترد دوم برای فرستادن پینگ مداوم و روشن نگه داشتن ربات
+    t_ping = Thread(target=ping_self)
+    t_ping.start()
+    
+    # ترد اصلی برای پاسخگویی تلگرام
     run_bot()
