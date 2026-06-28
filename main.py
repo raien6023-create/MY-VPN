@@ -1,28 +1,36 @@
 import os
+from flask import Flask
 import telebot
-from telebot import types
+from threading import Thread
 
-# خواندن توکن از تنظیمات رندر (بدون نیاز به نوشتن مستقیم توکن در کد)
+# ۱. ساخت سرور وب برای رندر
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "ربات با موفقیت روی وب‌سرویس رندر روشن است! 🚀"
+
+def run_web_server():
+    # رندر پورت رو در متغیر محیطی PORT قرار میده، اگر نبود روی ۸۰۸۰ اجرا میشه
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+# ۲. تنظیمات ربات تلگرام
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# دستور /start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    item1 = types.KeyboardButton("🛒 خرید کانفیگ")
-    item2 = types.KeyboardButton("📞 پشتیبانی")
-    markup.add(item1, item2)
+    bot.reply_to(message, "سلام! ربات فروش کانفیگ شما روی وب‌سرویس رندر فعال است.")
+
+def run_bot():
+    bot.infinity_polling()
+
+# ۳. اجرای هم‌زمان سرور وب و ربات
+if __name__ == "__main__":
+    # سرور وب رو در یک رشته (Thread) جداگانه روشن می‌کنیم
+    t = Thread(target=run_web_server)
+    t.start()
     
-    bot.reply_to(message, "به ربات فروش کانفیگ خوش آمدید! لطفا یک گزینه را انتخاب کنید:", reply_markup=markup)
-
-# پاسخ به دکمه‌ها
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    if message.text == "🛒 خرید کانفیگ":
-        bot.send_message(message.chat.id, "جهت خرید کانفیگ و دریافت لیست قیمت‌ها به پشتیبانی پیام دهید.")
-    elif message.text == "📞 پشتیبانی":
-        bot.send_message(message.chat.id, "آیدی پشتیبانی: @Your_Support_ID") # آیدی تلگرام خودت رو اینجا بنویس
-
-# روشن نگه داشتن ربات
-bot.infinity_polling()
+    # ربات رو روشن می‌کنیم
+    run_bot()
