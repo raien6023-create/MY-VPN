@@ -20,7 +20,7 @@ TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 # ⚠️ آیدی یا یوزرنیم کانال خودت رو اینجا وارد کن (حتما با @ شروع بشه)
-CHANNEL_USERNAME = "@Your_Channel_Username" 
+CHANNEL_USERNAME = "@ConfigLand0" 
 
 # تابع بررسی عضویت کاربر در کانال
 def is_user_member(user_id):
