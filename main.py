@@ -1,15 +1,16 @@
 import os
+import json
 from flask import Flask
 import telebot
 from telebot import types
 from threading import Thread
 
-# ۱. ساخت سرور وب برای رندر
+# ۱. ساخت سرور وب برای رندر (Keep-Alive)
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "ربات با موفقیت روی وب‌سرویس رندر روشن است! 🚀"
+    return "ربات فروش کانفیگ با موفقیت روی رندر روشن است! 🚀"
 
 def run_web_server():
     port = int(os.environ.get("PORT", 8080))
@@ -19,80 +20,206 @@ def run_web_server():
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# ⚠️ آیدی یا یوزرنیم کانال خودت رو اینجا وارد کن (حتما با @ شروع بشه)
-CHANNEL_USERNAME = "@ConfigLand0" 
+# ⚠️ اطلاعات خودت رو اینجا ست کن
+CHANNEL_USERNAME = "@ConfigLand0"  # یوزرنیم کانال با @
+ADMIN_ID = 7267007753  # آیدی عددی تلگرام خودت (به صورت عدد)
+CARD_NUMBER = "6037997275603489"
+CARD_NAME = "رایین ایمانی"
 
-# تابع بررسی عضویت کاربر در کانال
+# فایل‌های ذخیره اطلاعات کاربران (دیتابیس ساده JSON)
+DB_USERS = "users_db.json"
+
+def load_db():
+    if os.path.exists(DB_USERS):
+        with open(DB_USERS, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_db(data):
+    with open(DB_USERS, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+# مقداردهی اولیه دیتابیس برای کاربر جدید
+def init_user(user_id, referrer_id=None):
+    db = load_db()
+    uid = str(user_id)
+    if uid not in db:
+        db[uid] = {
+            "days_left": 0,
+            "referrals": 0,
+            "referred_by": referrer_id,
+            "claimed_rewards": 0
+        }
+        # اگر معرف داشته باشه، به تعداد دعوت‌های معرف یکی اضافه میکنیم
+        if referrer_id and str(referrer_id) in db:
+            db[str(referrer_id)]["referrals"] += 1
+            try:
+                bot.send_message(referrer_id, "🎉 یک نفر با لینک شما وارد ربات و کانال شد! به تعداد دعوت‌های شما اضافه شد.")
+            except:
+                pass
+        save_db(db)
+
+# تابع بررسی عضویت اجباری در کانال
 def is_user_member(user_id):
     try:
-        # وضعیت کاربر در کانال رو بررسی میکنه
         member_status = bot.get_chat_member(CHANNEL_USERNAME, user_id).status
-        # اگر وضعیت یکی از این‌ها باشه، یعنی عضو هست
         if member_status in ['member', 'creator', 'administrator']:
             return True
         return False
     except Exception as e:
-        # اگر ربات ادمین کانال نباشه یا آیدی اشتباه باشه، این بخش اجرا میشه
         print(f"Error checking channel member: {e}")
         return False
 
-# منوی اصلی ربات
-def send_main_menu(message):
+# ساخت کیبورد منوی اصلی
+def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    item1 = types.KeyboardButton("🛒 خرید کانفیگ")
-    item2 = types.KeyboardButton("📞 پشتیبانی")
-    markup.add(item1, item2)
-    bot.send_message(message.chat.id, "به ربات فروش کانفیگ خوش آمدید! لطفا یک گزینه را انتخاب کنید:", reply_markup=markup)
+    markup.add(types.KeyboardButton("🛒 خرید کانفیگ"), types.KeyboardButton("🎁 تست ۱ روزه"))
+    markup.add(types.KeyboardButton("📊 وضعیت کانفیگ"), types.KeyboardButton("👥 زیرمجموعه‌گیری"))
+    markup.add(types.KeyboardButton("📞 پشتیبانی"))
+    return markup
 
-# دستور /start
+# ساخت کیبورد دکمه بازگشت
+def get_back_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("🔙 بازگشت به منوی اصلی"))
+    return markup
+
+# دستور /start (پشتیبانی از لینک رفرال)
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.from_user.id
+    args = message.text.split()
     
-    # بررسی جوین اجباری
+    referrer_id = None
+    if len(args) > 1 and args[1].isdigit():
+        referrer_id = int(args[1])
+        if referrer_id == user_id:  # کاربر نمی‌تونه خودش رو دعوت کنه
+            referrer_id = None
+
     if is_user_member(user_id):
-        send_main_menu(message)
+        init_user(user_id, referrer_id)
+        bot.send_message(message.chat.id, "به ربات فروش کانفیگ خوش آمدید! لطفا یک گزینه را انتخاب کنید:", reply_markup=get_main_menu())
     else:
-        # ساخت دکمه شیشه‌ای برای ورود به کانال و تایید عضویت
+        # اگر عضو نباشد، دکمه جوین اجباری نشان داده می‌شود
         markup = types.InlineKeyboardMarkup()
         btn_channel = types.InlineKeyboardButton("📢 ورود به کانال", url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}")
-        btn_check = types.InlineKeyboardButton("✅ عضو شدم (تایید)", callback_data="check_join")
+        # ذخیره معرف در کالبک داتا برای زمان تایید عضویت
+        ref_data = f"check_{referrer_id}" if referrer_id else "check_none"
+        btn_check = types.InlineKeyboardButton("✅ عضو شدم (تایید)", callback_data=ref_data)
         markup.add(btn_channel)
         markup.add(btn_check)
         
         bot.send_message(message.chat.id, f"پیش از استفاده از ربات، باید در کانال ما عضو شوید:\n\n{CHANNEL_USERNAME}", reply_markup=markup)
 
 # بررسی کلیک روی دکمه "عضو شدم"
-@bot.callback_query_handler(func=lambda call: call.data == "check_join")
+@bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
 def check_join_callback(call):
     user_id = call.from_user.id
+    ref_part = call.data.split("_")[1]
+    referrer_id = int(ref_part) if ref_part != "none" else None
+    
     if is_user_member(user_id):
-        # حذف پیام قبلی و فرستادن منوی اصلی
+        init_user(user_id, referrer_id)
         bot.delete_message(call.message.chat.id, call.message.message_id)
-        send_main_menu(call.message)
+        bot.send_message(call.message.chat.id, "عضویت شما تایید شد! به منوی اصلی خوش آمدید:", reply_markup=get_main_menu())
     else:
         bot.answer_callback_query(call.id, "❌ شما هنوز در کانال عضو نشده‌اید!", show_alert=True)
 
-# پاسخ به دکمه‌های منوی اصلی (فقط در صورت عضویت)
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
+# پاسخ به پیام‌های متنی و دکمه‌ها
+@bot.message_handler(func=lambda message: True, content_types=['text', 'photo'])
+def handle_all_messages(message):
     user_id = message.from_user.id
     
-    # اول مانیتور میکنه که وسط کار لفت نداده باشه
+    # همواره در قدم اول چک میکند که لفت نداده باشد
     if not is_user_member(user_id):
         send_welcome(message)
         return
 
+    db = load_db()
+    uid = str(user_id)
+    if uid not in db:
+        init_user(user_id)
+        db = load_db()
+
+    # مدیریت دکمه بازگشت
+    if message.text == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "به منوی اصلی برگشتید:", reply_markup=get_main_menu())
+        return
+
+    # دکمه خرید کانفیگ و لیست قیمت‌ها
     if message.text == "🛒 خرید کانفیگ":
-        bot.send_message(message.chat.id, "جهت خرید کانفیگ و دریافت لیست قیمت‌ها به پشتیبانی پیام دهید.")
-    elif message.text == "📞 پشتیبانی":
-        bot.send_message(message.chat.id, "آیدی پشتیبانی: @Your_Support_ID")
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("20 گیگ - 100 هزار تومان", callback_data="buy_20gb"),
+            types.InlineKeyboardButton("40 گیگ - 200 هزار تومان", callback_data="buy_40gb"),
+            types.InlineKeyboardButton("60 گیگ - 300 هزار تومان", callback_data="buy_60gb"),
+            types.InlineKeyboardButton("80 گیگ - 400 هزار تومان", callback_data="buy_80gb"),
+            types.InlineKeyboardButton("نامحدود - 600 هزار تومان", callback_data="buy_unlimited")
+        )
+        bot.send_message(message.chat.id, "لطفا تعرفه مورد نظر خود را انتخاب کنید:", reply_markup=markup)
+        return
 
-def run_bot():
-    bot.infinity_polling()
+    # دکمه تست ۱ روزه
+    if message.text == "🎁 تست ۱ روزه":
+        bot.send_message(message.chat.id, "⏳ درخواست تست شما ثبت شد و برای ادمین ارسال گردید. به زودی کانفیگ برای شما ارسال می‌شود.")
+        # ارسال اعلان برای ادمین
+        bot.send_message(ADMIN_ID, f"🔔 **درخواست تست رایگان**\n\n👤 کاربر: {message.from_user.first_name}\n🆔 آیدی عددی: `{user_id}`\nیوزرنیم: @{message.from_user.username or 'ندارد'}")
+        return
 
-# ۳. اجرای هم‌زمان سرور وب و ربات
-if __name__ == "__main__":
-    t = Thread(target=run_web_server)
-    t.start()
-    run_bot()
+    # دکمه وضعیت کانفیگ
+    if message.text == "📊 وضعیت کانفیگ":
+        days = db[uid].get("days_left", 0)
+        if days > 0:
+            bot.send_message(message.chat.id, f"✅ اشتراک شما فعال است.\n⏳ مدت زمان باقی‌مانده: {days} روز")
+        else:
+            bot.send_message(message.chat.id, "❌ شما در حال حاضر اکانت یا اشتراک فعالی ندارید.")
+        return
+
+    # دکمه زیرمجموعه‌گیری
+    if message.text == "👥 زیرمجموعه‌گیری":
+        bot_info = bot.get_me()
+        ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
+        refs = db[uid].get("referrals", 0)
+        
+        markup = types.InlineKeyboardMarkup()
+        if refs >= 5:
+            markup.add(types.InlineKeyboardButton("🎁 دریافت هدیه (۱۰ گیگ)", callback_data="claim_reward"))
+            
+        msg = f"👥 **سیستم زیرمجموعه‌گیری**\n\nبا دعوت هر ۵ نفر به ربات، ۱۰ گیگابایت کانفیگ هدیه بگیرید!\n\n" \
+              f"🔗 لینک اختصاصی شما:\n`{ref_link}`\n\n" \
+              f"📊 تعداد دعوت‌های شما تاکنون: {refs} نفر"
+        bot.send_message(message.chat.id, msg, parse_mode="Markdown", reply_markup=markup)
+        return
+
+    # دکمه پشتیبانی
+    if message.text == "📞 پشتیبانی":
+        bot.send_message(message.chat.id, f"جهت ارتباط با پشتیبانی، پاسخ به سوالات یا پیگیری خرید با آیدی زیر در ارتباط باشید:\n\n➡️ @Your_Support_ID")
+        return
+
+    # دریافت فیش واریزی (عکس)
+    if message.content_type == 'photo':
+        # اگر کاربر عکس فرستاد، بررسی میکنیم که آیا در کپشن فیش نوشته یا نه، یا کلاً به عنوان فیش برای ادمین می‌فرستیم
+        bot.send_message(message.chat.id, "✅ فیش واریزی شما دریافت شد و برای بررسی به ادمین ارسال گردید. لطفا منتظر تایید بمانید.", reply_markup=get_main_menu())
+        
+        # فوروارد عکس فیش برای ادمین به همراه مشخصات واریز کننده
+        bot.send_message(ADMIN_ID, f"💰 **فیش واریزی جدید واصل شد!**\n\n👤 فرستنده: {message.from_user.first_name}\n🆔 آیدی عددی: `{user_id}`\nیوزرنیم: @{message.from_user.username or 'ندارد'}")
+        bot.send_photo(ADMIN_ID, message.photo[-1].file_id)
+        return
+
+# کالبک دکمه‌های خرید تعرفه
+@bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
+def buy_callback(call):
+    plan = call.data.split("_")[1]
+    prices = {"20gb": "100,000", "40gb": "200,000", "60gb": "300,000", "80gb": "400,000", "unlimited": "600,000"}
+    names = {"20gb": "20 گیگ", "40gb": "40 گیگ", "60gb": "60 گیگ", "80gb": "80 گیگ", "unlimited": "نامحدود"}
+    
+    msg = f"💳 **دستورالعمل پرداخت**\n\n" \
+          f"📦 تعرفه انتخابی: {names[plan]}\n" \
+          f"💵 مبلغ قابل پرداخت: {prices[plan]} تومان\n\n" \
+          f"لطفاً مبلغ را به شماره کارت زیر واریز نمایید:\n" \
+          f"💳 `{CARD_NUMBER}`\n" \
+          f"👤 به نام: {CARD_NAME}\n\n" \
+          f"⚠️ پس از واریز، **تصویر (عکس) فیش واریزی** خود را مستقیم در همین ربات ارسال کنید تا سفارش شما تایید شود."
+          
+    bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=None)
+    bot.send_message(call.message.chat.id, "اکنون فیش واریزی خود را بفرستید یا دکمه زیر
