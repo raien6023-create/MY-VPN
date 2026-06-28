@@ -207,6 +207,7 @@ def handle_all_messages(message):
         return
 
 # کالبک دکمه‌های خرید تعرفه
+# کالبک دکمه‌های خرید تعرفه
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
 def buy_callback(call):
     plan = call.data.split("_")[1]
@@ -222,4 +223,6 @@ def buy_callback(call):
           f"⚠️ پس از واریز، **تصویر (عکس) فیش واریزی** خود را مستقیم در همین ربات ارسال کنید تا سفارش شما تایید شود."
           
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=None)
-    bot.send_message(call.message.chat.id, "اکنون فیش واریزی خود را بفرستید یا دکمه زیر
+    
+    # این خط اصلاح شد تا در یک خط باشد و ارور ندهد
+    bot.send_message(call.message.chat.id, "اکنون فیش خود را بفرستید یا دکمه زیر را بزنید:", reply_markup=get_back_menu())
