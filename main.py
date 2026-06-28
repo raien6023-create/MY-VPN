@@ -21,7 +21,7 @@ TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 # ⚠️ اطلاعات خودت رو اینجا ست کن
-CHANNEL_USERNAME = "8947693833:AAHwnZJThono-6-z5sR-V_5Qi7OrxzlHI1M"  # یوزرنیم کانال با @
+CHANNEL_USERNAME = "@ConfigLand0"  # یوزرنیم کانال با @
 ADMIN_ID = 7267007753  # آیدی عددی تلگرام خودت (به صورت عدد)
 CARD_NUMBER = "6037997275603489"
 CARD_NAME = "رایین ایمانی"
