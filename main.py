@@ -21,7 +21,7 @@ TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 # ⚠️ اطلاعات خودت رو اینجا ست کن
-CHANNEL_USERNAME = "@ConfigLand0"  # یوزرنیم کانال با @
+CHANNEL_USERNAME = "8947693833:AAHwnZJThono-6-z5sR-V_5Qi7OrxzlHI1M"  # یوزرنیم کانال با @
 ADMIN_ID = 7267007753  # آیدی عددی تلگرام خودت (به صورت عدد)
 CARD_NUMBER = "6037997275603489"
 CARD_NAME = "رایین ایمانی"
@@ -31,9 +31,15 @@ DB_USERS = "users_db.json"
 
 def load_db():
     if os.path.exists(DB_USERS):
-        with open(DB_USERS, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+        try:
+            with open(DB_USERS, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    else:
+        with open(DB_USERS, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        return {}
 
 def save_db(data):
     with open(DB_USERS, "w", encoding="utf-8") as f:
@@ -50,7 +56,6 @@ def init_user(user_id, referrer_id=None):
             "referred_by": referrer_id,
             "claimed_rewards": 0
         }
-        # اگر معرف داشته باشه، به تعداد دعوت‌های معرف یکی اضافه میکنیم
         if referrer_id and str(referrer_id) in db:
             db[str(referrer_id)]["referrals"] += 1
             try:
@@ -93,17 +98,15 @@ def send_welcome(message):
     referrer_id = None
     if len(args) > 1 and args[1].isdigit():
         referrer_id = int(args[1])
-        if referrer_id == user_id:  # کاربر نمی‌تونه خودش رو دعوت کنه
+        if referrer_id == user_id:
             referrer_id = None
 
     if is_user_member(user_id):
         init_user(user_id, referrer_id)
         bot.send_message(message.chat.id, "به ربات فروش کانفیگ خوش آمدید! لطفا یک گزینه را انتخاب کنید:", reply_markup=get_main_menu())
     else:
-        # اگر عضو نباشد، دکمه جوین اجباری نشان داده می‌شود
         markup = types.InlineKeyboardMarkup()
         btn_channel = types.InlineKeyboardButton("📢 ورود به کانال", url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}")
-        # ذخیره معرف در کالبک داتا برای زمان تایید عضویت
         ref_data = f"check_{referrer_id}" if referrer_id else "check_none"
         btn_check = types.InlineKeyboardButton("✅ عضو شدم (تایید)", callback_data=ref_data)
         markup.add(btn_channel)
@@ -130,7 +133,6 @@ def check_join_callback(call):
 def handle_all_messages(message):
     user_id = message.from_user.id
     
-    # همواره در قدم اول چک میکند که لفت نداده باشد
     if not is_user_member(user_id):
         send_welcome(message)
         return
@@ -141,12 +143,10 @@ def handle_all_messages(message):
         init_user(user_id)
         db = load_db()
 
-    # مدیریت دکمه بازگشت
     if message.text == "🔙 بازگشت به منوی اصلی":
         bot.send_message(message.chat.id, "به منوی اصلی برگشتید:", reply_markup=get_main_menu())
         return
 
-    # دکمه خرید کانفیگ و لیست قیمت‌ها
     if message.text == "🛒 خرید کانفیگ":
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
@@ -159,14 +159,11 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, "لطفا تعرفه مورد نظر خود را انتخاب کنید:", reply_markup=markup)
         return
 
-    # دکمه تست ۱ روزه
     if message.text == "🎁 تست ۱ روزه":
         bot.send_message(message.chat.id, "⏳ درخواست تست شما ثبت شد و برای ادمین ارسال گردید. به زودی کانفیگ برای شما ارسال می‌شود.")
-        # ارسال اعلان برای ادمین
         bot.send_message(ADMIN_ID, f"🔔 **درخواست تست رایگان**\n\n👤 کاربر: {message.from_user.first_name}\n🆔 آیدی عددی: `{user_id}`\nیوزرنیم: @{message.from_user.username or 'ندارد'}")
         return
 
-    # دکمه وضعیت کانفیگ
     if message.text == "📊 وضعیت کانفیگ":
         days = db[uid].get("days_left", 0)
         if days > 0:
@@ -175,7 +172,6 @@ def handle_all_messages(message):
             bot.send_message(message.chat.id, "❌ شما در حال حاضر اکانت یا اشتراک فعالی ندارید.")
         return
 
-    # دکمه زیرمجموعه‌گیری
     if message.text == "👥 زیرمجموعه‌گیری":
         bot_info = bot.get_me()
         ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
@@ -185,28 +181,20 @@ def handle_all_messages(message):
         if refs >= 5:
             markup.add(types.InlineKeyboardButton("🎁 دریافت هدیه (۱۰ گیگ)", callback_data="claim_reward"))
             
-        msg = f"👥 **سیستم زیرمجموعه‌گیری**\n\nبا دعوت هر ۵ نفر به ربات، ۱۰ گیگابایت کانفیگ هدیه بگیرید!\n\n" \
-              f"🔗 لینک اختصاصی شما:\n`{ref_link}`\n\n" \
-              f"📊 تعداد دعوت‌های شما تاکنون: {refs} نفر"
+        msg = f"👥 **سیستم زیرمجموعه‌گیری**\n\nبا دعوت هر ۵ نفر به ربات، ۱۰ گیگابایت کانفیگ هدیه بگیرید!\n\n🔗 لینک اختصاصی شما:\n`{ref_link}`\n\n📊 تعداد دعوت‌های شما تاکنون: {refs} نفر"
         bot.send_message(message.chat.id, msg, parse_mode="Markdown", reply_markup=markup)
         return
 
-    # دکمه پشتیبانی
     if message.text == "📞 پشتیبانی":
-        bot.send_message(message.chat.id, f"جهت ارتباط با پشتیبانی، پاسخ به سوالات یا پیگیری خرید با آیدی زیر در ارتباط باشید:\n\n➡️ @Your_Support_ID")
+        bot.send_message(message.chat.id, f"جهت ارتباط با پشتیبانی، پاسخ به سوالات یا پیگیری خرید با آیدی زیر در ارتباط باشید:\n\n➡️ @AmirTA28")
         return
 
-    # دریافت فیش واریزی (عکس)
     if message.content_type == 'photo':
-        # اگر کاربر عکس فرستاد، بررسی میکنیم که آیا در کپشن فیش نوشته یا نه، یا کلاً به عنوان فیش برای ادمین می‌فرستیم
         bot.send_message(message.chat.id, "✅ فیش واریزی شما دریافت شد و برای بررسی به ادمین ارسال گردید. لطفا منتظر تایید بمانید.", reply_markup=get_main_menu())
-        
-        # فوروارد عکس فیش برای ادمین به همراه مشخصات واریز کننده
         bot.send_message(ADMIN_ID, f"💰 **فیش واریزی جدید واصل شد!**\n\n👤 فرستنده: {message.from_user.first_name}\n🆔 آیدی عددی: `{user_id}`\nیوزرنیم: @{message.from_user.username or 'ندارد'}")
         bot.send_photo(ADMIN_ID, message.photo[-1].file_id)
         return
 
-# کالبک دکمه‌های خرید تعرفه
 # کالبک دکمه‌های خرید تعرفه
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
 def buy_callback(call):
@@ -223,6 +211,53 @@ def buy_callback(call):
           f"⚠️ پس از واریز، **تصویر (عکس) فیش واریزی** خود را مستقیم در همین ربات ارسال کنید تا سفارش شما تایید شود."
           
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=None)
-    
-    # این خط اصلاح شد تا در یک خط باشد و ارور ندهد
     bot.send_message(call.message.chat.id, "اکنون فیش خود را بفرستید یا دکمه زیر را بزنید:", reply_markup=get_back_menu())
+
+# کالبک دکمه هدیه رفرال
+@bot.callback_query_handler(func=lambda call: call.data == "claim_reward")
+def claim_reward_callback(call):
+    user_id = call.from_user.id
+    db = load_db()
+    uid = str(user_id)
+    
+    refs = db[uid].get("referrals", 0)
+    if refs >= 5:
+        db[uid]["referrals"] -= 5
+        save_db(db)
+        bot.edit_message_text("✅ درخواست هدیه ۱۰ گیگ شما به دلیل دعوت ۵ نفر با موفقیت ثبت و به ادمین ارسال شد.", call.message.chat.id, call.message.message_id)
+        bot.send_message(ADMIN_ID, f"🎁 **درخواست کانفیگ هدیه (رفرال)**\n\n👤 کاربر: {call.from_user.first_name}\n🆔 آیدی عددی: `{user_id}`\nیوزرنیم: @{call.from_user.username or 'ندارد'}")
+    else:
+        bot.answer_callback_query(call.id, "❌ تعداد زیرمجموعه‌های شما کافی نیست!", show_alert=True)
+
+# دستور ادمین برای مدیریت روزها (فرمت: /setday ID DAY)
+@bot.message_handler(commands=['setday'])
+def set_user_days(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    try:
+        args = message.text.split()
+        target_id = args[1]
+        days = int(args[2])
+        
+        db = load_db()
+        if target_id in db:
+            db[target_id]["days_left"] = days
+            save_db(db)
+            bot.reply_to(message, f"✅ مدت زمان اشتراک کاربر `{target_id}` به {days} روز تغییر یافت.", parse_mode="Markdown")
+            try:
+                bot.send_message(int(target_id), f"🎉 اشتراک شما توسط مدیریت تنظیم شد.\n📊 روزهای باقی‌مانده: {days} روز")
+            except:
+                pass
+        else:
+            bot.reply_to(message, "❌ این کاربر در دیتابیس یافت نشد.")
+    except Exception as e:
+        bot.reply_to(message, "❌ فرمت اشتباه است!\nفرمت صحیح: `/setday 123456789 30`", parse_mode="Markdown")
+
+def run_bot():
+    bot.infinity_polling()
+
+# ۳. اجرای هم‌زمان سرور وب و ربات
+if __name__ == "__main__":
+    t = Thread(target=run_web_server)
+    t.start()
+    run_bot()
